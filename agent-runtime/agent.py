@@ -38,7 +38,7 @@ def run_loop():
     ]
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
-    model = "claude-3-5-sonnet-20241022"
+    model = "claude-sonnet-4-6"
     if not ANTHROPIC_API_KEY:
         log("error", "ANTHROPIC_API_KEY not set; agent cannot run")
         return
