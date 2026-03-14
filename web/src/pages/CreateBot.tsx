@@ -36,7 +36,8 @@ export default function CreateBot() {
   const [customTools, setCustomTools] = useState<string[]>(["get_memory", "store_memory", "complete"]);
 
   const isCustom = selected !== null && templates.some((t) => t.id === selected && t.name === "Custom");
-  const templatesSorted = [...templates].sort((a, b) => (a.name === "Custom" ? -1 : b.name === "Custom" ? 1 : 0));
+  const customTemplate = templates.find((t) => t.name === "Custom");
+  const templatesOnly = templates.filter((t) => t.name !== "Custom");
 
   useEffect(() => {
     apiFetch("/api/templates", {}, token)
@@ -115,54 +116,69 @@ export default function CreateBot() {
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. My Faucet Hunter" style={{ maxWidth: "400px" }} />
       </div>
 
+      {customTemplate && (
+        <div style={{ marginBottom: "1.5rem" }}>
+          <label
+            style={{
+              display: "block",
+              background: selected === customTemplate.id ? "rgba(167, 139, 250, 0.18)" : "rgba(167, 139, 250, 0.06)",
+              border: "2px solid var(--accent)",
+              borderRadius: "12px",
+              padding: "1rem 1.25rem",
+              cursor: "pointer",
+              position: "relative",
+            }}
+          >
+            <input
+              type="radio"
+              name="template"
+              value={customTemplate.id}
+              checked={selected === customTemplate.id}
+              onChange={() => setSelected(customTemplate.id)}
+              style={{ width: "auto", marginRight: "0.5rem" }}
+            />
+            <span style={{ position: "absolute", top: "0.75rem", right: "1rem", fontSize: "0.7rem", fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              No template
+            </span>
+            <strong>{customTemplate.name}</strong>
+            {customTemplate.description && <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{customTemplate.description}</p>}
+          </label>
+        </div>
+      )}
+
       <p style={{ marginBottom: "0.5rem", fontWeight: 600 }}>Template</p>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.5rem" }}>
-        {templatesSorted.map((t) => {
-          const isCustomOption = t.name === "Custom";
-          return (
-            <label
-              key={t.id}
-              style={{
-                display: "block",
-                background: selected === t.id
-                  ? isCustomOption ? "rgba(167, 139, 250, 0.18)" : "rgba(167, 139, 250, 0.1)"
-                  : isCustomOption ? "rgba(167, 139, 250, 0.06)" : "var(--surface)",
-                border: `2px solid ${selected === t.id ? "var(--accent)" : isCustomOption ? "var(--accent)" : "var(--border)"}`,
-                borderRadius: "12px",
-                padding: "1rem 1.25rem",
-                cursor: "pointer",
-                position: "relative",
+        {templatesOnly.map((t) => (
+          <label
+            key={t.id}
+            style={{
+              display: "block",
+              background: selected === t.id ? "rgba(167, 139, 250, 0.1)" : "var(--surface)",
+              border: `2px solid ${selected === t.id ? "var(--accent)" : "var(--border)"}`,
+              borderRadius: "12px",
+              padding: "1rem 1.25rem",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="radio"
+              name="template"
+              value={t.id}
+              checked={selected === t.id}
+              onChange={() => {
+                setSelected(t.id);
+                setCustomPrompt("");
+                setCustomTools(["get_memory", "store_memory", "complete"]);
               }}
-            >
-              <input
-                type="radio"
-                name="template"
-                value={t.id}
-                checked={selected === t.id}
-                onChange={() => {
-                  setSelected(t.id);
-                  if (t.name !== "Custom") {
-                    setCustomPrompt("");
-                    setCustomTools(["get_memory", "store_memory", "complete"]);
-                  }
-                }}
-                style={{ width: "auto", marginRight: "0.5rem" }}
-              />
-              {isCustomOption && (
-                <span style={{ position: "absolute", top: "0.75rem", right: "1rem", fontSize: "0.7rem", fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  No template
-                </span>
-              )}
-              <strong>{t.name}</strong>
-              {t.description && <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{t.description}</p>}
-              {!isCustomOption && (
-                <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "var(--muted)" }}>
-                  Limits: {t.maxRuntimeMinutes} min · {Math.round(t.maxTokensPerRun / 1000)}k tokens · ${(t.maxSpendCents / 100).toFixed(2)} max
-                </p>
-              )}
-            </label>
-          );
-        })}
+              style={{ width: "auto", marginRight: "0.5rem" }}
+            />
+            <strong>{t.name}</strong>
+            {t.description && <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{t.description}</p>}
+            <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "var(--muted)" }}>
+              Limits: {t.maxRuntimeMinutes} min · {Math.round(t.maxTokensPerRun / 1000)}k tokens · ${(t.maxSpendCents / 100).toFixed(2)} max
+            </p>
+          </label>
+        ))}
       </div>
 
       {isCustom && (
