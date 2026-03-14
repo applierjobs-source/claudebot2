@@ -1,3 +1,4 @@
+import https from "https";
 import { Client } from "ssh2";
 import { randomBytes } from "crypto";
 
@@ -36,66 +37,84 @@ export interface ProvisionResult {
   error?: string;
 }
 
-function getSshConnection(): Promise<{ host: string; connect: () => Promise<Client> }> {
+function fetchDropletInfo(): Promise<{ ip: string }> {
   return new Promise((resolve, reject) => {
-    if (!DO_DROPLET_ID || !DO_SSH_PRIVATE_KEY_RAW) {
-      reject(new Error("DO_DROPLET_ID and DO_SSH_PRIVATE_KEY must be set for provisioning"));
-      return;
-    }
-    const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
-    if (!DO_API_TOKEN) {
-      reject(new Error("DO_TOKEN must be set for provisioning"));
-      return;
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    fetch(`https://api.digitalocean.com/v2/droplets/${DO_DROPLET_ID}`, {
-      headers: { Authorization: `Bearer ${DO_API_TOKEN}` },
-      signal: controller.signal,
-    })
-      .then((r) => {
-        clearTimeout(timeout);
-        if (!r.ok) return r.json().then((d: { message?: string }) => Promise.reject(new Error(d.message || `DO API ${r.status}`)));
-        return r.json();
-      })
-      .then((data: { droplet?: { id: number; status: string; networks?: { v4?: { ip_address: string }[] } } }) => {
-        const droplet = data.droplet;
-        if (!droplet || droplet.status !== "active") {
-          reject(new Error("Droplet not found or not active"));
-          return;
-        }
-        const ip = droplet.networks?.v4?.[0]?.ip_address;
-        if (!ip) {
-          reject(new Error("Droplet has no IP"));
-          return;
-        }
-        resolve({
-          host: ip,
-          connect: () =>
-            new Promise<Client>((res, rej) => {
-              const c = new Client();
-              c.on("ready", () => res(c));
-              c.on("error", rej);
-              c.connect({
-                host: ip,
-                port: 22,
-                username: DO_SSH_USER,
-                privateKey,
-              });
-            }),
-        });
-      })
-      .catch((e: unknown) => {
-        clearTimeout(timeout);
-        if (e instanceof Error) {
-          if (e.name === "AbortError") reject(new Error("DigitalOcean API request timed out (15s)"));
-          else {
-            const cause = e.cause instanceof Error ? e.cause.message : (e.cause ? String(e.cause) : "");
-            reject(new Error(cause ? `${e.message} (${cause})` : e.message));
+    const req = https.request(
+      {
+        hostname: "api.digitalocean.com",
+        path: `/v2/droplets/${DO_DROPLET_ID}`,
+        method: "GET",
+        headers: { Authorization: `Bearer ${DO_API_TOKEN}` },
+        timeout: 15000,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (ch) => (body += ch));
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(body) as { droplet?: { status: string; networks?: { v4?: { ip_address: string }[] } } };
+            const droplet = data.droplet;
+            if (!droplet || droplet.status !== "active") {
+              reject(new Error("Droplet not found or not active"));
+              return;
+            }
+            const ip = droplet.networks?.v4?.[0]?.ip_address;
+            if (!ip) {
+              reject(new Error("Droplet has no IP"));
+              return;
+            }
+            resolve({ ip });
+          } catch {
+            reject(new Error(res.statusCode ? `DO API ${res.statusCode}: ${body.slice(0, 200)}` : "Invalid DO API response"));
           }
-        } else reject(e);
-      });
+        });
+      }
+    );
+    req.on("error", (e: NodeJS.ErrnoException) => {
+      const msg = e.code ? `DigitalOcean API: ${e.code} - ${e.message}` : e.message;
+      reject(new Error(msg));
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("DigitalOcean API request timed out (15s)"));
+    });
+    req.end();
   });
+}
+
+function getSshConnection(): Promise<{ host: string; connect: () => Promise<Client> }> {
+  if (!DO_DROPLET_ID || !DO_SSH_PRIVATE_KEY_RAW) {
+    return Promise.reject(new Error("DO_DROPLET_ID and DO_SSH_PRIVATE_KEY must be set for provisioning"));
+  }
+  const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
+  if (!DO_API_TOKEN) {
+    return Promise.reject(new Error("DO_TOKEN must be set for provisioning"));
+  }
+  const maxAttempts = 3;
+  let lastErr: Error | null = null;
+  const tryFetch = (attempt: number): Promise<{ ip: string }> =>
+    fetchDropletInfo().catch((e) => {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      if (attempt < maxAttempts) {
+        return new Promise((res, rej) => setTimeout(() => tryFetch(attempt + 1).then(res, rej), 2000));
+      }
+      return Promise.reject(lastErr);
+    });
+  return tryFetch(1).then(({ ip }) => ({
+    host: ip,
+    connect: () =>
+      new Promise<Client>((res, rej) => {
+        const c = new Client();
+        c.on("ready", () => res(c));
+        c.on("error", rej);
+        c.connect({
+          host: ip,
+          port: 22,
+          username: DO_SSH_USER,
+          privateKey,
+        });
+      }),
+  }));
 }
 
 function runSshCommand(conn: Client, cmd: string): Promise<string> {
