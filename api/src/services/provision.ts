@@ -31,6 +31,8 @@ function normalizePrivateKey(key: string): string {
 const AGENT_IMAGE = process.env.AGENT_IMAGE ?? "ghcr.io/your-org/claudebot-agent:latest";
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
+const GHCR_TOKEN = process.env.GHCR_TOKEN ?? "";
+const GHCR_USER = process.env.GHCR_USER ?? "applierjobs-source";
 
 export interface ProvisionResult {
   dropletId: string | null;
@@ -165,6 +167,12 @@ export async function startBotContainer(
       await runSshCommand(conn, "which docker || (apt-get update -qq && apt-get install -qq -y docker.io)");
     } catch {
       // ignore if docker already there
+    }
+
+    if (GHCR_TOKEN) {
+      const safeToken = GHCR_TOKEN.replace(/'/g, "'\"'\"'");
+      const loginCmd = `echo '${safeToken}' | docker login ghcr.io -u ${GHCR_USER} --password-stdin`;
+      await runSshCommand(conn, loginCmd);
     }
 
     const configB64 = Buffer.from(configJson, "utf-8").toString("base64");
