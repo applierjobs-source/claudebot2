@@ -91,10 +91,12 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
   }
   const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
 
+  const SSH_HANDSHAKE_MS = 60000; // 60s for slow Railway → Droplet links
+  const SSH_TOTAL_MS = 70000; // 70s overall abort
   const connectWithIp = (ip: string) => ({
     host: ip,
-    connect: () =>
-      new Promise<Client>((res, rej) => {
+    connect: () => {
+      const connectPromise = new Promise<Client>((res, rej) => {
         const c = new Client();
         c.on("ready", () => res(c));
         c.on("error", rej);
@@ -103,8 +105,17 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
           port: 22,
           username: DO_SSH_USER,
           privateKey,
+          readyTimeout: SSH_HANDSHAKE_MS,
         });
-      }),
+      });
+      const timeoutPromise = new Promise<never>((_, rej) =>
+        setTimeout(
+          () => rej(new Error(`SSH timed out after ${SSH_TOTAL_MS / 1000}s. Check Droplet IP (${ip}), firewall, and that port 22 is open from this network.`)),
+          SSH_TOTAL_MS
+        )
+      );
+      return Promise.race([connectPromise, timeoutPromise]);
+    },
   });
 
   if (DO_DROPLET_IP && DO_DROPLET_IP.trim()) {
