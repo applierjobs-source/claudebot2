@@ -1,4 +1,5 @@
 """Tool registry: build Claude tool definitions and executor from allowed_tools list."""
+from .base import ToolResult
 from .browser import browse_page, extract_content
 from .http import http_request
 from .files import read_file, write_file, list_dir
@@ -115,13 +116,6 @@ EXECUTORS = {
     "get_memory": get_memory,
     "complete": complete,
 }
-
-
-class ToolResult:
-    def __init__(self, success: bool, output: str, data=None):
-        self.success = success
-        self.output = output
-        self.data = data or {}
 
 
 def get_tools_for_agent(allowed_tools: list[str]):

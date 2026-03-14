@@ -1,6 +1,6 @@
 """Browser tools using Playwright (headless)."""
 import os
-from .registry import ToolResult
+from .base import ToolResult
 
 _browser = None
 _page = None
