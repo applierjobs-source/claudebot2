@@ -12,7 +12,8 @@ import { healthRouter } from "./routes/health.js";
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
-app.use(cors({ origin: process.env.WEB_ORIGIN ?? "*", credentials: true }));
+const corsOrigin = process.env.WEB_ORIGIN ?? "*";
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 
 const apiLimiter = rateLimit({

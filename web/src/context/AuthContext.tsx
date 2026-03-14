@@ -59,9 +59,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!token) return;
     fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data) => setUser(data.user))
-      .catch(() => { setToken(null); setUser(null); localStorage.removeItem("token"); });
+      .then((r) => {
+        if (r.status === 401) {
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem("token");
+          return;
+        }
+        return r.ok ? r.json() : Promise.reject();
+      })
+      .then((data) => data && setUser(data.user))
+      .catch(() => { /* only clear on 401 above; keep token on network/other errors */ });
   }, [token]);
 
   return (
