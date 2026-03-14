@@ -134,7 +134,20 @@ export default function CreateBot() {
                 position: "relative",
               }}
             >
-              <input type="radio" name="template" value={t.id} checked={selected === t.id} onChange={() => setSelected(t.id)} style={{ width: "auto", marginRight: "0.5rem" }} />
+              <input
+                type="radio"
+                name="template"
+                value={t.id}
+                checked={selected === t.id}
+                onChange={() => {
+                  setSelected(t.id);
+                  if (t.name !== "Custom") {
+                    setCustomPrompt("");
+                    setCustomTools(["get_memory", "store_memory", "complete"]);
+                  }
+                }}
+                style={{ width: "auto", marginRight: "0.5rem" }}
+              />
               {isCustomOption && (
                 <span style={{ position: "absolute", top: "0.75rem", right: "1rem", fontSize: "0.7rem", fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   No template

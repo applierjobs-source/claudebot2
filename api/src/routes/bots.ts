@@ -71,12 +71,30 @@ botsRouter.post("/", async (req, res) => {
     maxSpendCents?: number;
     startupActions?: unknown;
   };
-  const { templateId, name } = body;
+  const templateIdRaw = body.templateId != null ? String(body.templateId).trim() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : undefined;
 
   let template: { id: string; name: string; systemPrompt: string; allowedTools: string[]; maxRuntimeMinutes: number; maxTokensPerRun: number; maxSpendCents: number; startupActions: unknown; scheduleCron: string | null } | null;
   let configSnapshot: object;
 
-  if (typeof body.systemPrompt === "string" && body.systemPrompt.trim()) {
+  // Prefer template flow when templateId is present (so template create is never treated as custom)
+  if (templateIdRaw && !(typeof body.systemPrompt === "string" && body.systemPrompt.trim())) {
+    // Template bot: use template by id
+    template = await prisma.botTemplate.findUnique({ where: { id: templateIdRaw } });
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+    configSnapshot = {
+      systemPrompt: template.systemPrompt,
+      allowedTools: template.allowedTools,
+      maxRuntimeMinutes: template.maxRuntimeMinutes,
+      maxTokensPerRun: template.maxTokensPerRun,
+      maxSpendCents: template.maxSpendCents,
+      startupActions: template.startupActions,
+      scheduleCron: template.scheduleCron,
+    };
+  } else if (typeof body.systemPrompt === "string" && body.systemPrompt.trim()) {
     // Custom bot: no template, use body
     const customPrompt = body.systemPrompt.trim();
     const rawTools = Array.isArray(body.allowedTools) ? body.allowedTools : [];
@@ -100,24 +118,8 @@ botsRouter.post("/", async (req, res) => {
       scheduleCron: null,
     };
   } else {
-    if (!templateId) {
-      res.status(400).json({ error: "templateId required, or provide systemPrompt and allowedTools for a custom bot" });
-      return;
-    }
-    template = await prisma.botTemplate.findUnique({ where: { id: templateId } });
-    if (!template) {
-      res.status(404).json({ error: "Template not found" });
-      return;
-    }
-    configSnapshot = {
-      systemPrompt: template.systemPrompt,
-      allowedTools: template.allowedTools,
-      maxRuntimeMinutes: template.maxRuntimeMinutes,
-      maxTokensPerRun: template.maxTokensPerRun,
-      maxSpendCents: template.maxSpendCents,
-      startupActions: template.startupActions,
-      scheduleCron: template.scheduleCron,
-    };
+    res.status(400).json({ error: "templateId required, or provide systemPrompt and allowedTools for a custom bot" });
+    return;
   }
 
   const count = await prisma.bot.count({ where: { userId } });
@@ -130,7 +132,7 @@ botsRouter.post("/", async (req, res) => {
     data: {
       userId,
       templateId: template.id,
-      name: name?.trim() || (template.name === "Custom" ? "Custom Bot" : `${template.name} Bot`),
+      name: name || (template.name === "Custom" ? "Custom Bot" : `${template.name} Bot`),
       status: "pending",
       configSnapshot,
       logToken,
