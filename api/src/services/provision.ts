@@ -4,7 +4,13 @@ import { randomBytes } from "crypto";
 const DO_API_TOKEN = process.env.DO_TOKEN;
 const DO_DROPLET_ID = process.env.DO_DROPLET_ID; // MVP: single pre-created droplet
 const DO_SSH_USER = process.env.DO_SSH_USER ?? "root";
-const DO_SSH_PRIVATE_KEY = process.env.DO_SSH_PRIVATE_KEY ?? "";
+const DO_SSH_PRIVATE_KEY_RAW = process.env.DO_SSH_PRIVATE_KEY ?? "";
+
+/** Normalize PEM key from env: restore newlines if stored as literal \n */
+function normalizePrivateKey(key: string): string {
+  if (!key) return key;
+  return key.replace(/\\n/g, "\n").trim();
+}
 const AGENT_IMAGE = process.env.AGENT_IMAGE ?? "ghcr.io/your-org/claudebot-agent:latest";
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
@@ -17,10 +23,11 @@ export interface ProvisionResult {
 
 function getSshConnection(): Promise<{ host: string; connect: () => Promise<Client> }> {
   return new Promise((resolve, reject) => {
-    if (!DO_DROPLET_ID || !DO_SSH_PRIVATE_KEY) {
+    if (!DO_DROPLET_ID || !DO_SSH_PRIVATE_KEY_RAW) {
       reject(new Error("DO_DROPLET_ID and DO_SSH_PRIVATE_KEY must be set for provisioning"));
       return;
     }
+    const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
     if (!DO_API_TOKEN) {
       reject(new Error("DO_TOKEN must be set for provisioning"));
       return;
@@ -58,7 +65,7 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
                 host: ip,
                 port: 22,
                 username: DO_SSH_USER,
-                privateKey: DO_SSH_PRIVATE_KEY,
+                privateKey,
               });
             }),
         });
