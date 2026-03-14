@@ -21,10 +21,21 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
       reject(new Error("DO_DROPLET_ID and DO_SSH_PRIVATE_KEY must be set for provisioning"));
       return;
     }
+    if (!DO_API_TOKEN) {
+      reject(new Error("DO_TOKEN must be set for provisioning"));
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     fetch(`https://api.digitalocean.com/v2/droplets/${DO_DROPLET_ID}`, {
       headers: { Authorization: `Bearer ${DO_API_TOKEN}` },
+      signal: controller.signal,
     })
-      .then((r) => r.json())
+      .then((r) => {
+        clearTimeout(timeout);
+        if (!r.ok) return r.json().then((d: { message?: string }) => Promise.reject(new Error(d.message || `DO API ${r.status}`)));
+        return r.json();
+      })
       .then((data: { droplet?: { id: number; status: string; networks?: { v4?: { ip_address: string }[] } } }) => {
         const droplet = data.droplet;
         if (!droplet || droplet.status !== "active") {
@@ -52,7 +63,16 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
             }),
         });
       })
-      .catch(reject);
+      .catch((e: unknown) => {
+        clearTimeout(timeout);
+        if (e instanceof Error) {
+          if (e.name === "AbortError") reject(new Error("DigitalOcean API request timed out (15s)"));
+          else {
+            const cause = e.cause instanceof Error ? e.cause.message : (e.cause ? String(e.cause) : "");
+            reject(new Error(cause ? `${e.message} (${cause})` : e.message));
+          }
+        } else reject(e);
+      });
   });
 }
 
