@@ -2,6 +2,7 @@ import { Router, Request } from "express";
 import { PrismaClient } from "@prisma/client";
 import { authMiddleware } from "../middleware/auth.js";
 import { startBotContainer, stopBotContainer, generateLogToken } from "../services/provision.js";
+import { VALID_TOOLS } from "../seed-templates.js";
 
 const prisma = new PrismaClient();
 export const botsRouter = Router();
@@ -60,36 +61,76 @@ botsRouter.post("/:id/message", async (req, res) => {
 
 botsRouter.post("/", async (req, res) => {
   const userId = (req as unknown as { user: { userId: string } }).user.userId;
-  const { templateId, name } = req.body as { templateId?: string; name?: string };
-  if (!templateId) {
-    res.status(400).json({ error: "templateId required" });
-    return;
+  const body = req.body as {
+    templateId?: string;
+    name?: string;
+    systemPrompt?: string;
+    allowedTools?: string[];
+    maxRuntimeMinutes?: number;
+    maxTokensPerRun?: number;
+    maxSpendCents?: number;
+    startupActions?: unknown;
+  };
+  const { templateId, name } = body;
+
+  let template: { id: string; name: string; systemPrompt: string; allowedTools: string[]; maxRuntimeMinutes: number; maxTokensPerRun: number; maxSpendCents: number; startupActions: unknown; scheduleCron: string | null } | null;
+  let configSnapshot: object;
+
+  if (typeof body.systemPrompt === "string" && body.systemPrompt.trim()) {
+    // Custom bot: no template, use body
+    const customPrompt = body.systemPrompt.trim();
+    const rawTools = Array.isArray(body.allowedTools) ? body.allowedTools : [];
+    const allowedTools = rawTools.filter((t): t is string => typeof t === "string" && VALID_TOOLS.includes(t));
+    if (allowedTools.length === 0) {
+      res.status(400).json({ error: "allowedTools must include at least one valid tool", validTools: VALID_TOOLS });
+      return;
+    }
+    template = await prisma.botTemplate.findFirst({ where: { name: "Custom" } });
+    if (!template) {
+      res.status(503).json({ error: "Custom template not found; run seed or restart API" });
+      return;
+    }
+    configSnapshot = {
+      systemPrompt: customPrompt,
+      allowedTools,
+      maxRuntimeMinutes: typeof body.maxRuntimeMinutes === "number" && body.maxRuntimeMinutes > 0 ? Math.min(body.maxRuntimeMinutes, 480) : 60,
+      maxTokensPerRun: typeof body.maxTokensPerRun === "number" && body.maxTokensPerRun > 0 ? Math.min(body.maxTokensPerRun, 200000) : 60000,
+      maxSpendCents: typeof body.maxSpendCents === "number" && body.maxSpendCents > 0 ? Math.min(body.maxSpendCents, 1000) : 200,
+      startupActions: body.startupActions ?? null,
+      scheduleCron: null,
+    };
+  } else {
+    if (!templateId) {
+      res.status(400).json({ error: "templateId required, or provide systemPrompt and allowedTools for a custom bot" });
+      return;
+    }
+    template = await prisma.botTemplate.findUnique({ where: { id: templateId } });
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+    configSnapshot = {
+      systemPrompt: template.systemPrompt,
+      allowedTools: template.allowedTools,
+      maxRuntimeMinutes: template.maxRuntimeMinutes,
+      maxTokensPerRun: template.maxTokensPerRun,
+      maxSpendCents: template.maxSpendCents,
+      startupActions: template.startupActions,
+      scheduleCron: template.scheduleCron,
+    };
   }
-  const template = await prisma.botTemplate.findUnique({ where: { id: templateId } });
-  if (!template) {
-    res.status(404).json({ error: "Template not found" });
-    return;
-  }
+
   const count = await prisma.bot.count({ where: { userId } });
   if (count >= 10) {
     res.status(429).json({ error: "Maximum bots per user reached" });
     return;
   }
   const logToken = generateLogToken();
-  const configSnapshot = {
-    systemPrompt: template.systemPrompt,
-    allowedTools: template.allowedTools,
-    maxRuntimeMinutes: template.maxRuntimeMinutes,
-    maxTokensPerRun: template.maxTokensPerRun,
-    maxSpendCents: template.maxSpendCents,
-    startupActions: template.startupActions,
-    scheduleCron: template.scheduleCron,
-  };
   const bot = await prisma.bot.create({
     data: {
       userId,
-      templateId,
-      name: name ?? `${template.name} Bot`,
+      templateId: template.id,
+      name: name?.trim() || (template.name === "Custom" ? "Custom Bot" : `${template.name} Bot`),
       status: "pending",
       configSnapshot,
       logToken,

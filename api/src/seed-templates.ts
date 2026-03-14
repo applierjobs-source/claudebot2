@@ -88,6 +88,29 @@ Work methodically. Check get_memory for user_message or other prior state before
     maxSpendCents: 200,
     startupActions: [{ action: "start", goal: "Find and collect email addresses from the web" }],
   },
+  {
+    name: "Custom",
+    description: "Create your own agent with a custom system prompt and tools (no template).",
+    systemPrompt: "You are a custom autonomous agent. Follow the instructions and use the tools you have been given.",
+    allowedTools: ["browse_page", "extract_content", "http_request", "store_memory", "get_memory", "write_file", "read_file", "list_dir", "complete"],
+    scheduleCron: null,
+    maxRuntimeMinutes: 60,
+    maxTokensPerRun: 60000,
+    maxSpendCents: 200,
+    startupActions: null,
+  },
+];
+
+export const VALID_TOOLS = [
+  "browse_page",
+  "extract_content",
+  "http_request",
+  "read_file",
+  "write_file",
+  "list_dir",
+  "store_memory",
+  "get_memory",
+  "complete",
 ];
 
 export async function ensureTemplates(prisma: PrismaClient): Promise<void> {
