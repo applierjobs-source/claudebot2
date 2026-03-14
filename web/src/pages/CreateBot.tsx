@@ -38,8 +38,13 @@ export default function CreateBot() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId: selected, name: name || undefined }),
       }, token);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || "Failed to create bot");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.detail
+          ? `${data.error || "Failed to create bot"}: ${data.detail}`
+          : (data.error || data.detail || `Failed to create bot (${res.status})`);
+        throw new Error(msg);
+      }
       navigate(`/bot/${data.bot.id}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create bot");
@@ -56,7 +61,11 @@ export default function CreateBot() {
         <p style={{ color: "var(--muted)", margin: "0.25rem 0 0" }}>Choose a template and start your autonomous agent</p>
       </header>
 
-      {error && <p style={{ color: "var(--error)", marginBottom: "1rem" }}>{error}</p>}
+      {error && (
+        <div style={{ color: "var(--error)", marginBottom: "1rem", padding: "0.75rem", background: "rgba(239,68,68,0.1)", borderRadius: "8px", fontSize: "0.9rem", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          {error}
+        </div>
+      )}
 
       <div style={{ marginBottom: "1.5rem" }}>
         <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Bot name (optional)</label>
