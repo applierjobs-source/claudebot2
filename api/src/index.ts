@@ -12,6 +12,8 @@ import { healthRouter } from "./routes/health.js";
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
+app.set("trust proxy", 1);
+
 const corsOrigin = process.env.WEB_ORIGIN ?? "*";
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
