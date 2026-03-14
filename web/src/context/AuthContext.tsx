@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 
 const API = import.meta.env.VITE_API_URL || "";
 
@@ -17,6 +17,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
+  const skipMeRef = useRef(false);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch(`${API}/api/auth/login`, {
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(d.error || "Login failed");
     }
     const data = await res.json();
+    skipMeRef.current = true;
     setToken(data.token);
     setUser(data.user);
     localStorage.setItem("token", data.token);
@@ -45,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(d.error || "Signup failed");
     }
     const data = await res.json();
+    skipMeRef.current = true;
     setToken(data.token);
     setUser(data.user);
     localStorage.setItem("token", data.token);
@@ -58,6 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!token) return;
+    if (skipMeRef.current) {
+      skipMeRef.current = false;
+      return;
+    }
     fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => {
         if (r.status === 401) {
