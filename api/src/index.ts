@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { PrismaClient } from "@prisma/client";
+import { ensureTemplates } from "./seed-templates.js";
 import { authRouter } from "./routes/auth.js";
 import { botsRouter } from "./routes/bots.js";
 import { templatesRouter } from "./routes/templates.js";
@@ -32,6 +34,12 @@ app.use("/api/logs", logsRouter);
 app.use("/api/memory", memoryRouter);
 app.use("/health", healthRouter);
 
-app.listen(PORT, () => {
-  console.log(`API listening on port ${PORT}`);
-});
+const prisma = new PrismaClient();
+ensureTemplates(prisma)
+  .catch((e) => console.error("Seed templates failed:", e))
+  .finally(() => prisma.$disconnect())
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`API listening on port ${PORT}`);
+    });
+  });
