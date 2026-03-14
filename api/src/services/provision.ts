@@ -3,7 +3,8 @@ import { Client } from "ssh2";
 import { randomBytes } from "crypto";
 
 const DO_API_TOKEN = process.env.DO_TOKEN;
-const DO_DROPLET_ID = process.env.DO_DROPLET_ID; // MVP: single pre-created droplet
+const DO_DROPLET_ID = process.env.DO_DROPLET_ID;
+const DO_DROPLET_IP = process.env.DO_DROPLET_IP; // optional: use this to skip DO API call (avoids ETIMEDOUT from Railway)
 const DO_SSH_USER = process.env.DO_SSH_USER ?? "root";
 const DO_SSH_PRIVATE_KEY_RAW = process.env.DO_SSH_PRIVATE_KEY ?? "";
 
@@ -83,24 +84,12 @@ function fetchDropletInfo(): Promise<{ ip: string }> {
 }
 
 function getSshConnection(): Promise<{ host: string; connect: () => Promise<Client> }> {
-  if (!DO_DROPLET_ID || !DO_SSH_PRIVATE_KEY_RAW) {
-    return Promise.reject(new Error("DO_DROPLET_ID and DO_SSH_PRIVATE_KEY must be set for provisioning"));
+  if (!DO_SSH_PRIVATE_KEY_RAW) {
+    return Promise.reject(new Error("DO_SSH_PRIVATE_KEY must be set for provisioning"));
   }
   const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
-  if (!DO_API_TOKEN) {
-    return Promise.reject(new Error("DO_TOKEN must be set for provisioning"));
-  }
-  const maxAttempts = 3;
-  let lastErr: Error | null = null;
-  const tryFetch = (attempt: number): Promise<{ ip: string }> =>
-    fetchDropletInfo().catch((e) => {
-      lastErr = e instanceof Error ? e : new Error(String(e));
-      if (attempt < maxAttempts) {
-        return new Promise((res, rej) => setTimeout(() => tryFetch(attempt + 1).then(res, rej), 2000));
-      }
-      return Promise.reject(lastErr);
-    });
-  return tryFetch(1).then(({ ip }) => ({
+
+  const connectWithIp = (ip: string) => ({
     host: ip,
     connect: () =>
       new Promise<Client>((res, rej) => {
@@ -114,7 +103,26 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
           privateKey,
         });
       }),
-  }));
+  });
+
+  if (DO_DROPLET_IP && DO_DROPLET_IP.trim()) {
+    return Promise.resolve(connectWithIp(DO_DROPLET_IP.trim()));
+  }
+
+  if (!DO_DROPLET_ID || !DO_API_TOKEN) {
+    return Promise.reject(new Error("Set DO_DROPLET_IP (recommended), or DO_DROPLET_ID and DO_TOKEN for provisioning"));
+  }
+  const maxAttempts = 3;
+  let lastErr: Error | null = null;
+  const tryFetch = (attempt: number): Promise<{ ip: string }> =>
+    fetchDropletInfo().catch((e) => {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      if (attempt < maxAttempts) {
+        return new Promise((res, rej) => setTimeout(() => tryFetch(attempt + 1).then(res, rej), 2000));
+      }
+      return Promise.reject(lastErr);
+    });
+  return tryFetch(1).then(({ ip }) => connectWithIp(ip));
 }
 
 function runSshCommand(conn: Client, cmd: string): Promise<string> {
