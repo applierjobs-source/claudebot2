@@ -1,0 +1,17 @@
+{
+  "name": "claudebot-platform",
+  "private": true,
+  "description": "SaaS platform for autonomous Claude bots in isolated cloud environments",
+  "scripts": {
+    "dev:api": "cd api && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "build:api": "cd api && npm run build",
+    "build:web": "cd web && npm run build",
+    "db:generate": "cd api && npx prisma generate",
+    "db:push": "cd api && npx prisma db push",
+    "db:migrate": "cd api && npx prisma migrate deploy"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

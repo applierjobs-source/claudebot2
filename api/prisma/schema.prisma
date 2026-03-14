@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String  @map("password_hash")
+  name         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  bots         Bot[]
+  usage        Usage[]
+  billing      Billing[]
+}
+
+model BotTemplate {
+  id                 String   @id @default(uuid())
+  name               String
+  description        String?
+  systemPrompt       String   @map("system_prompt")
+  allowedTools       String[] @map("allowed_tools")
+  scheduleCron       String?  @map("schedule_cron")
+  maxRuntimeMinutes  Int      @map("max_runtime_minutes")
+  maxTokensPerRun    Int      @map("max_tokens_per_run")
+  maxSpendCents      Int      @map("max_spend_cents")
+  startupActions     Json?    @map("startup_actions")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  bots               Bot[]
+}
+
+model Bot {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  templateId      String    @map("template_id")
+  name            String?
+  status          String    @default("pending") // pending | running | stopped | error
+  configSnapshot  Json?     @map("config_snapshot")
+  dropletId       String?   @map("droplet_id")
+  containerId     String?   @map("container_id")
+  logToken        String?   @map("log_token")   // for authenticating log ingestion
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template        BotTemplate @relation(fields: [templateId], references: [id])
+  runs            BotRun[]
+  logs            BotLog[]
+  memory          BotMemory[]
+}
+
+model BotRun {
+  id         String    @id @default(uuid())
+  botId      String    @map("bot_id")
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt    DateTime? @map("ended_at")
+  status     String    @default("running") // running | completed | failed | stopped
+  tokensUsed Int      @default(0) @map("tokens_used")
+  spendCents Int      @default(0) @map("spend_cents")
+  summary    String?
+  bot        Bot       @relation(fields: [botId], references: [id], onDelete: Cascade)
+  logs       BotLog[]
+}
+
+model BotLog {
+  id        String   @id @default(uuid())
+  botId     String   @map("bot_id")
+  runId     String?  @map("run_id")
+  level     String   // info | warn | error | action
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  run       BotRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+}
+
+model BotMemory {
+  id        String   @id @default(uuid())
+  botId     String   @map("bot_id")
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  @@unique([botId, key])
+  @@map("bot_memory")
+}
+
+model Usage {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  periodStart  DateTime @map("period_start")
+  periodEnd    DateTime @map("period_end")
+  apiCalls     Int      @default(0) @map("api_calls")
+  tokensInput  Int      @default(0) @map("tokens_input")
+  tokensOutput Int      @default(0) @map("tokens_output")
+  spendCents   Int      @default(0) @map("spend_cents")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Billing {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  amountCents Int      @map("amount_cents")
+  currency    String   @default("usd")
+  status      String   // pending | paid | failed
+  stripeId    String?  @map("stripe_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
