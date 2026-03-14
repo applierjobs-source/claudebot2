@@ -31,6 +31,33 @@ botsRouter.get("/:id", async (req, res) => {
   res.json(bot);
 });
 
+botsRouter.post("/:id/message", async (req, res) => {
+  const userId = (req as unknown as { user: { userId: string } }).user.userId;
+  const bot = await prisma.bot.findFirst({ where: { id: req.params.id, userId } });
+  if (!bot) {
+    res.status(404).json({ error: "Bot not found" });
+    return;
+  }
+  const body = req.body as { message?: string };
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!message) {
+    res.status(400).json({ error: "message required" });
+    return;
+  }
+  await prisma.botMemory.upsert({
+    where: { botId_key: { botId: bot.id, key: "user_message" } },
+    create: {
+      botId: bot.id,
+      key: "user_message",
+      value: { text: message, at: new Date().toISOString() },
+    },
+    update: {
+      value: { text: message, at: new Date().toISOString() },
+    },
+  });
+  res.json({ ok: true, message: "Message sent. The bot will read it on its next loop." });
+});
+
 botsRouter.post("/", async (req, res) => {
   const userId = (req as unknown as { user: { userId: string } }).user.userId;
   const { templateId, name } = req.body as { templateId?: string; name?: string };

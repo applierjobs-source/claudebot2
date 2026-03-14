@@ -26,6 +26,9 @@ export default function BotDetail() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<string | null>(null);
+  const [userMessage, setUserMessage] = useState("");
+  const [messageSending, setMessageSending] = useState(false);
+  const [messageStatus, setMessageStatus] = useState<string | null>(null);
 
   const load = () => {
     if (!id) return;
@@ -62,6 +65,31 @@ export default function BotDetail() {
     }
   };
 
+  const sendMessage = async () => {
+    const msg = userMessage.trim();
+    if (!id || !msg) return;
+    setMessageSending(true);
+    setMessageStatus(null);
+    try {
+      const r = await apiFetch(`/api/bots/${id}/message`, {
+        method: "POST",
+        body: JSON.stringify({ message: msg }),
+        headers: { "Content-Type": "application/json" },
+      }, token);
+      const data = r.ok ? await r.json().catch(() => ({})) : null;
+      if (r.ok) {
+        setUserMessage("");
+        setMessageStatus(data?.message || "Message sent. The bot will read it on its next loop.");
+      } else {
+        setMessageStatus("Failed to send");
+      }
+    } catch {
+      setMessageStatus("Failed to send");
+    } finally {
+      setMessageSending(false);
+    }
+  };
+
   if (!bot && !loading) {
     return (
       <div className="container">
@@ -93,6 +121,28 @@ export default function BotDetail() {
           </div>
         </div>
       </header>
+
+      <section style={{ marginBottom: "2rem" }}>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Send instruction to bot</h2>
+        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+          Your message will be read by the bot on its next loop. Use this to give new goals or context (e.g. &quot;Find emails on https://example.com&quot;).
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "32rem" }}>
+          <textarea
+            value={userMessage}
+            onChange={(e) => setUserMessage(e.target.value)}
+            placeholder="e.g. Search this URL for contact emails..."
+            rows={3}
+            style={{ padding: "0.5rem", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--bg)", color: "inherit", resize: "vertical" }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <button onClick={sendMessage} disabled={messageSending || !userMessage.trim()} className="primary">
+              {messageSending ? "Sending..." : "Send"}
+            </button>
+            {messageStatus && <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>{messageStatus}</span>}
+          </div>
+        </div>
+      </section>
 
       <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Logs</h2>

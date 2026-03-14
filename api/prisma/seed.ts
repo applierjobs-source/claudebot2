@@ -73,6 +73,23 @@ Build a growing list of unique domains with optional metadata (title, first seen
     maxSpendCents: 250,
     startupActions: [{ action: "discover_domains", seeds: [] }],
   },
+  {
+    name: "Email Finder",
+    description: "Finds and collects email addresses from websites or a given topic.",
+    systemPrompt: `You are an email finder agent. Your job is to:
+- Visit websites (from user instructions, memory, or search results) and extract email addresses
+- Use browse_page to open pages and extract_content to get text; identify emails with a simple pattern (e.g. something@domain)
+- Store found emails in memory with store_memory and write a report file (e.g. emails_found.txt or .csv)
+- Respect user instructions: if the user sends a message (e.g. "search this URL" or "find emails about X"), prioritize that
+- Do not invent or guess emails; only record addresses you actually see on the page
+Work methodically. Check get_memory for user_message or other prior state before starting.`,
+    allowedTools: ["browse_page", "extract_content", "http_request", "store_memory", "get_memory", "write_file", "read_file", "list_dir", "complete"],
+    scheduleCron: null,
+    maxRuntimeMinutes: 60,
+    maxTokensPerRun: 60000,
+    maxSpendCents: 200,
+    startupActions: [{ action: "start", goal: "Find and collect email addresses from the web" }],
+  },
 ];
 
 async function main() {

@@ -5,6 +5,7 @@ Includes retry, timeout, budget tracking, and state persistence.
 import os
 import time
 import json
+import urllib.request
 from datetime import datetime, timedelta
 from anthropic import Anthropic
 from config import load_config
@@ -13,6 +14,37 @@ from logger import log
 
 WORKSPACE = "/workspace"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+
+def _fetch_and_clear_user_message(context: dict) -> str | None:
+    """If the user sent a message via the dashboard, return it and clear it from memory."""
+    base = (context.get("api_url") or os.environ.get("API_URL", "")).rstrip("/")
+    token = context.get("log_token") or os.environ.get("LOG_TOKEN", "")
+    if not base or not token:
+        return None
+    url = f"{base}/api/memory"
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("X-Log-Token", token)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode())
+    except Exception:
+        return None
+    user_msg = data.get("user_message")
+    if not isinstance(user_msg, dict):
+        return None
+    text = user_msg.get("text") if isinstance(user_msg.get("text"), str) else None
+    if not (text and text.strip()):
+        return None
+    # Clear so we don't inject again
+    clear_req = urllib.request.Request(url, data=json.dumps({"user_message": {}}).encode("utf-8"), method="POST")
+    clear_req.add_header("X-Log-Token", token)
+    clear_req.add_header("Content-Type", "application/json")
+    try:
+        urllib.request.urlopen(clear_req, timeout=10)
+    except Exception:
+        pass
+    return text.strip()
 
 
 def run_loop():
@@ -80,6 +112,15 @@ def run_loop():
             log("info", "Task complete", {"summary": context.get("_complete_summary", "")})
             run_complete = True
             break
+
+        # Inject any user message from the dashboard
+        user_text = _fetch_and_clear_user_message(context)
+        if user_text:
+            messages.append({
+                "role": "user",
+                "content": f"[User instruction from dashboard] {user_text}",
+            })
+            log("info", f"User instruction received: {user_text[:200]}{'...' if len(user_text) > 200 else ''}")
 
         # Think: call Claude
         try:
