@@ -121,8 +121,8 @@ export default function CreateBot() {
           <label
             style={{
               display: "block",
-              background: selected === customTemplate.id ? "rgba(167, 139, 250, 0.18)" : "rgba(167, 139, 250, 0.06)",
-              border: "2px solid var(--accent)",
+              background: selected === customTemplate.id ? "rgba(167, 139, 250, 0.1)" : "var(--surface)",
+              border: `2px solid ${selected === customTemplate.id ? "var(--accent)" : "var(--border)"}`,
               borderRadius: "12px",
               padding: "1rem 1.25rem",
               cursor: "pointer",
@@ -143,6 +143,27 @@ export default function CreateBot() {
             <strong>{customTemplate.name}</strong>
             {customTemplate.description && <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{customTemplate.description}</p>}
           </label>
+          {isCustom && (
+            <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
+              <p style={{ marginBottom: "0.5rem", fontWeight: 600 }}>System prompt</p>
+              <textarea
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                placeholder="e.g. You are a research assistant. Visit the URLs the user provides and summarize the main points. Use get_memory to read user instructions."
+                rows={5}
+                style={{ width: "100%", maxWidth: "600px", padding: "0.75rem", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg)", color: "inherit", fontFamily: "inherit", fontSize: "0.9rem", resize: "vertical" }}
+              />
+              <p style={{ marginTop: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>Tools (select at least one)</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
+                {VALID_TOOLS.map((tool) => (
+                  <label key={tool} style={{ display: "flex", alignItems: "center", gap: "0.35rem", cursor: "pointer", fontSize: "0.9rem" }}>
+                    <input type="checkbox" checked={customTools.includes(tool)} onChange={() => toggleTool(tool)} style={{ width: "auto" }} />
+                    {tool}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -180,28 +201,6 @@ export default function CreateBot() {
           </label>
         ))}
       </div>
-
-      {isCustom && (
-        <div style={{ marginBottom: "2rem", padding: "1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-          <p style={{ marginBottom: "0.5rem", fontWeight: 600 }}>System prompt</p>
-          <textarea
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder="e.g. You are a research assistant. Visit the URLs the user provides and summarize the main points. Use get_memory to read user instructions."
-            rows={5}
-            style={{ width: "100%", maxWidth: "600px", padding: "0.75rem", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg)", color: "inherit", fontFamily: "inherit", fontSize: "0.9rem", resize: "vertical" }}
-          />
-          <p style={{ marginTop: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>Tools (select at least one)</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
-            {VALID_TOOLS.map((tool) => (
-              <label key={tool} style={{ display: "flex", alignItems: "center", gap: "0.35rem", cursor: "pointer", fontSize: "0.9rem" }}>
-                <input type="checkbox" checked={customTools.includes(tool)} onChange={() => toggleTool(tool)} style={{ width: "auto" }} />
-                {tool}
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
 
       <button className="primary" onClick={handleCreate} disabled={loading}>
         {loading ? "Creating..." : "Create Bot"}
