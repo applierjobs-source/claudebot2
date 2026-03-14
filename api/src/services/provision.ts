@@ -6,10 +6,25 @@ const DO_DROPLET_ID = process.env.DO_DROPLET_ID; // MVP: single pre-created drop
 const DO_SSH_USER = process.env.DO_SSH_USER ?? "root";
 const DO_SSH_PRIVATE_KEY_RAW = process.env.DO_SSH_PRIVATE_KEY ?? "";
 
-/** Normalize PEM key from env: restore newlines if stored as literal \n */
+/** Normalize PEM key from env: restore newlines, or rebuild if pasted as one line */
 function normalizePrivateKey(key: string): string {
   if (!key) return key;
-  return key.replace(/\\n/g, "\n").trim();
+  let k = key.replace(/\\n/g, "\n").trim();
+  // If key is one line (env var stripped newlines), rebuild PEM
+  if (!k.includes("\n") && k.includes("-----BEGIN")) {
+    const begin = "-----BEGIN OPENSSH PRIVATE KEY-----";
+    const end = "-----END OPENSSH PRIVATE KEY-----";
+    const beginIdx = k.indexOf(begin);
+    const endIdx = k.indexOf(end);
+    if (beginIdx !== -1 && endIdx > beginIdx) {
+      const middle = k.slice(beginIdx + begin.length, endIdx).replace(/\s/g, "");
+      const lines: string[] = [begin];
+      for (let i = 0; i < middle.length; i += 70) lines.push(middle.slice(i, i + 70));
+      lines.push(end);
+      k = lines.join("\n");
+    }
+  }
+  return k;
 }
 const AGENT_IMAGE = process.env.AGENT_IMAGE ?? "ghcr.io/your-org/claudebot-agent:latest";
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
