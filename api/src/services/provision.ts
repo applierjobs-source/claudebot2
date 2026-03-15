@@ -91,30 +91,39 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
   }
   const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
 
-  const SSH_HANDSHAKE_MS = 60000; // 60s for slow Railway → Droplet links
-  const SSH_TOTAL_MS = 70000; // 70s overall abort
+  const SSH_HANDSHAKE_MS = 35000; // 35s per attempt
+  const SSH_TOTAL_MS = 40000; // 40s overall per attempt
   const connectWithIp = (ip: string) => ({
     host: ip,
     connect: () => {
-      const connectPromise = new Promise<Client>((res, rej) => {
-        const c = new Client();
-        c.on("ready", () => res(c));
-        c.on("error", rej);
-        c.connect({
-          host: ip,
-          port: 22,
-          username: DO_SSH_USER,
-          privateKey,
-          readyTimeout: SSH_HANDSHAKE_MS,
+      const attempt = (): Promise<Client> => {
+        const connectPromise = new Promise<Client>((res, rej) => {
+          const c = new Client();
+          c.on("ready", () => res(c));
+          c.on("error", rej);
+          c.connect({
+            host: ip,
+            port: 22,
+            username: DO_SSH_USER,
+            privateKey,
+            readyTimeout: SSH_HANDSHAKE_MS,
+          });
+        });
+        const timeoutPromise = new Promise<never>((_, rej) =>
+          setTimeout(
+            () => rej(new Error(`Timed out while waiting for handshake. Check Droplet IP (${ip}), firewall, and port 22.`)),
+            SSH_TOTAL_MS
+          )
+        );
+        return Promise.race([connectPromise, timeoutPromise]);
+      };
+      return attempt().catch((firstErr) => {
+        const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        if (!msg.includes("handshake") && !msg.includes("timed out") && !msg.includes("Timed out")) return Promise.reject(firstErr);
+        return new Promise<Client>((res, rej) => {
+          setTimeout(() => attempt().then(res, rej), 3000);
         });
       });
-      const timeoutPromise = new Promise<never>((_, rej) =>
-        setTimeout(
-          () => rej(new Error(`SSH timed out after ${SSH_TOTAL_MS / 1000}s. Check Droplet IP (${ip}), firewall, and that port 22 is open from this network.`)),
-          SSH_TOTAL_MS
-        )
-      );
-      return Promise.race([connectPromise, timeoutPromise]);
     },
   });
 
@@ -187,8 +196,15 @@ export async function startBotContainer(
     }
 
     const configB64 = Buffer.from(configJson, "utf-8").toString("base64");
-    const envAnthropic = ANTHROPIC_API_KEY ? ` -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY.replace(/'/g, "'\\''")}` : "";
-    const runCmd = `docker run -d --name ${containerName} --restart unless-stopped -e BOT_ID=${safeBotId} -e API_URL=${API_URL} -e LOG_TOKEN=${logToken} -e CONFIG_B64=${configB64}${envAnthropic} ${AGENT_IMAGE}`;
+    const safeEnv = (v: string) => `'${v.replace(/'/g, "'\"'\"'")}'`;
+    const envParts = [
+      `-e BOT_ID=${safeEnv(safeBotId)}`,
+      `-e API_URL=${safeEnv(API_URL)}`,
+      `-e LOG_TOKEN=${safeEnv(logToken)}`,
+      `-e CONFIG_B64=${safeEnv(configB64)}`,
+    ];
+    if (ANTHROPIC_API_KEY) envParts.push(`-e ANTHROPIC_API_KEY=${safeEnv(ANTHROPIC_API_KEY)}`);
+    const runCmd = `docker run -d --name ${containerName} --restart unless-stopped ${envParts.join(" ")} ${AGENT_IMAGE}`;
     const out = await runSshCommand(conn, runCmd);
     conn.end();
     const containerId = out.slice(0, 12) || null;

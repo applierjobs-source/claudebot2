@@ -140,53 +140,43 @@ botsRouter.post("/", async (req, res) => {
     include: { template: { select: { name: true, description: true } } },
   });
 
+  // Return immediately so request never hangs; container starts in background (or use Start on bot page to retry)
+  res.status(201).json({ bot });
+
   const configJson = JSON.stringify(configSnapshot);
   const snapshotForError = configSnapshot as object;
-  let result: { dropletId: string | null; containerId: string | null; error?: string };
-  try {
-    result = await startBotContainer(bot.id, logToken, configJson);
-  } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e);
-    await prisma.bot.update({
-      where: { id: bot.id },
-      data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: errMsg } },
-    });
-    res.status(502).json({
-      bot: { ...bot, status: "error" },
-      error: "Failed to start container",
-      detail: errMsg,
-    });
-    return;
-  }
-  if (result.error) {
-    await prisma.bot.update({
-      where: { id: bot.id },
-      data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: result.error } },
-    });
-    res.status(502).json({
-      bot: { ...bot, status: "error" },
-      error: "Failed to start container",
-      detail: result.error,
-    });
-    return;
-  }
-  await prisma.bot.update({
-    where: { id: bot.id },
-    data: {
-      status: "running",
-      dropletId: result.dropletId,
-      containerId: result.containerId,
-      lastHeartbeatAt: new Date(),
-    },
+  const botId = bot.id;
+  setImmediate(() => {
+    startBotContainer(botId, logToken, configJson)
+      .then(async (result) => {
+        if (result.error) {
+          await prisma.bot.update({
+            where: { id: botId },
+            data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: result.error } },
+          });
+          return;
+        }
+        await prisma.bot.update({
+          where: { id: botId },
+          data: {
+            status: "running",
+            dropletId: result.dropletId,
+            containerId: result.containerId,
+            lastHeartbeatAt: new Date(),
+          },
+        });
+        await prisma.botRun.create({
+          data: { botId, status: "running" },
+        });
+      })
+      .catch(async (e) => {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        await prisma.bot.update({
+          where: { id: botId },
+          data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: errMsg } },
+        });
+      });
   });
-  await prisma.botRun.create({
-    data: { botId: bot.id, status: "running" },
-  });
-  const updated = await prisma.bot.findUnique({
-    where: { id: bot.id },
-    include: { template: { select: { name: true, description: true } } },
-  });
-  res.status(201).json({ bot: updated });
 });
 
 botsRouter.post("/:id/stop", async (req, res) => {
@@ -227,6 +217,9 @@ botsRouter.post("/:id/restart", async (req, res) => {
       containerId: result.containerId,
       lastHeartbeatAt: new Date(),
     },
+  });
+  await prisma.botRun.create({
+    data: { botId: bot.id, status: "running" },
   });
   res.json({ ok: true, status: "running" });
 });
