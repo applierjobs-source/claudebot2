@@ -144,15 +144,15 @@ botsRouter.post("/", async (req, res) => {
   const snapshotForError = configSnapshot as object;
 
   // Template and custom both use this same path: we never return 201 until bot is "running" or "error"
-  // Keep under Railway request timeout (~60s) so we always send a response and never leave bot stuck in "pending"
-  const CREATE_START_TIMEOUT_MS = 50_000; // same as START_TIMEOUT_MS below
+  // Keep under Railway request timeout (~60s). SSH + docker run often needs 45–55s.
+  const CREATE_START_TIMEOUT_MS = 58_000;
   let result: { dropletId: string | null; containerId: string | null; error?: string };
   try {
     result = await Promise.race([
       startBotContainer(bot.id, logToken, configJson),
       new Promise<never>((_, rej) =>
         setTimeout(
-          () => rej(new Error("Start timed out (50s). Click Start on the bot page to retry.")),
+          () => rej(new Error("Start timed out (58s). Click Start on the bot page to retry.")),
           CREATE_START_TIMEOUT_MS
         )
       ),
@@ -215,7 +215,7 @@ botsRouter.post("/:id/stop", async (req, res) => {
   res.json({ ok: true, status: "stopped" });
 });
 
-const START_TIMEOUT_MS = 50_000; // same as create: under Railway request limit
+const START_TIMEOUT_MS = 58_000; // same as create: under Railway request limit
 
 botsRouter.post("/:id/restart", async (req, res) => {
   const userId = (req as unknown as { user: { userId: string } }).user.userId;
@@ -234,7 +234,7 @@ botsRouter.post("/:id/restart", async (req, res) => {
       startBotContainer(bot.id, bot.logToken!, configJson),
       new Promise<never>((_, rej) =>
         setTimeout(
-          () => rej(new Error("Start timed out (50s). Try Start again.")),
+          () => rej(new Error("Start timed out (58s). Try Start again.")),
           START_TIMEOUT_MS
         )
       ),

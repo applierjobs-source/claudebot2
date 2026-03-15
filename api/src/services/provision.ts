@@ -30,6 +30,8 @@ function normalizePrivateKey(key: string): string {
 }
 const AGENT_IMAGE = process.env.AGENT_IMAGE ?? "ghcr.io/your-org/claudebot-agent:latest";
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
+// URL the *container* uses to reach the API (must be reachable from the Droplet). Set PUBLIC_API_URL on Railway to your public API URL so logs/ingest and memory work.
+const CONTAINER_API_URL = process.env.PUBLIC_API_URL?.trim() || API_URL;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
 const GHCR_TOKEN = process.env.GHCR_TOKEN ?? "";
 const GHCR_USER = process.env.GHCR_USER ?? "applierjobs-source";
@@ -91,9 +93,9 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
   }
   const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
 
-  // One attempt must fit inside create timeout (50s) so we can succeed when network is good
-  const SSH_HANDSHAKE_MS = 38000; // 38s per attempt
-  const SSH_TOTAL_MS = 43000; // 43s overall per attempt
+  // One attempt + docker run must fit inside create timeout (58s)
+  const SSH_HANDSHAKE_MS = 28000; // 28s handshake
+  const SSH_TOTAL_MS = 33000; // 33s per attempt, leaves ~25s for docker run
   const RETRY_DELAY_MS = 3000;
   const connectWithIp = (ip: string) => ({
     host: ip,
@@ -211,7 +213,7 @@ export async function startBotContainer(
     const safeEnv = (v: string) => `'${v.replace(/'/g, "'\"'\"'")}'`;
     const envParts = [
       `-e BOT_ID=${safeEnv(safeBotId)}`,
-      `-e API_URL=${safeEnv(API_URL)}`,
+      `-e API_URL=${safeEnv(CONTAINER_API_URL)}`,
       `-e LOG_TOKEN=${safeEnv(logToken)}`,
       `-e CONFIG_B64=${safeEnv(configB64)}`,
     ];

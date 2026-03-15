@@ -17,6 +17,6 @@ def log(level: str, message: str, meta: dict = None):
     req.add_header("X-Log-Token", log_token)
     req.add_header("Content-Type", "application/json")
     try:
-        urllib.request.urlopen(req, timeout=5)
+        urllib.request.urlopen(req, timeout=10)
     except Exception as e:
-        print(f"[logger] failed to send: {e}", flush=True)
+        print(f"[logger] Log ingest failed. From the Droplet, API_URL must be the public API URL (e.g. https://your-api.railway.app). Error: {e}", flush=True)

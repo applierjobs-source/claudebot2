@@ -48,6 +48,8 @@ def _fetch_and_clear_user_message(context: dict) -> str | None:
 
 
 def run_loop():
+    # Early log so we see activity as soon as the container starts (and surface API_URL issues)
+    log("info", "Agent starting", {"bot_id": os.environ.get("BOT_ID", "")})
     config = load_config()
     system_prompt = config.get("systemPrompt", "")
     allowed_tools = config.get("allowedTools", [])
