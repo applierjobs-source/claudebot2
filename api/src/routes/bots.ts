@@ -143,15 +143,16 @@ botsRouter.post("/", async (req, res) => {
   const configJson = JSON.stringify(configSnapshot);
   const snapshotForError = configSnapshot as object;
 
-  // Must be longer than SSH attempt(s): we use ~55s per attempt with retries, so allow 2 full attempts
-  const CREATE_START_TIMEOUT_MS = 130_000;
+  // Template and custom both use this same path: we never return 201 until bot is "running" or "error"
+  // Keep under Railway request timeout (~60s) so we always send a response and never leave bot stuck in "pending"
+  const CREATE_START_TIMEOUT_MS = 50_000; // same as START_TIMEOUT_MS below
   let result: { dropletId: string | null; containerId: string | null; error?: string };
   try {
     result = await Promise.race([
       startBotContainer(bot.id, logToken, configJson),
       new Promise<never>((_, rej) =>
         setTimeout(
-          () => rej(new Error("Start timed out (2 min). Click Start on the bot page to retry.")),
+          () => rej(new Error("Start timed out (50s). Click Start on the bot page to retry.")),
           CREATE_START_TIMEOUT_MS
         )
       ),
@@ -214,6 +215,8 @@ botsRouter.post("/:id/stop", async (req, res) => {
   res.json({ ok: true, status: "stopped" });
 });
 
+const START_TIMEOUT_MS = 50_000; // same as create: under Railway request limit
+
 botsRouter.post("/:id/restart", async (req, res) => {
   const userId = (req as unknown as { user: { userId: string } }).user.userId;
   const bot = await prisma.bot.findFirst({ where: { id: req.params.id, userId }, include: { template: true } });
@@ -224,9 +227,32 @@ botsRouter.post("/:id/restart", async (req, res) => {
   await stopBotContainer(bot.id);
   const configSnapshot = (bot.configSnapshot as object) || {};
   const configJson = JSON.stringify(configSnapshot);
-  const result = await startBotContainer(bot.id, bot.logToken!, configJson);
+  const snapshotForError = configSnapshot as Record<string, unknown>;
+  let result: { dropletId: string | null; containerId: string | null; error?: string };
+  try {
+    result = await Promise.race([
+      startBotContainer(bot.id, bot.logToken!, configJson),
+      new Promise<never>((_, rej) =>
+        setTimeout(
+          () => rej(new Error("Start timed out (50s). Try Start again.")),
+          START_TIMEOUT_MS
+        )
+      ),
+    ]);
+  } catch (e) {
+    const errMsg = e instanceof Error ? e.message : String(e);
+    await prisma.bot.update({
+      where: { id: bot.id },
+      data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: errMsg } },
+    });
+    res.status(502).json({ error: "Failed to start", detail: errMsg });
+    return;
+  }
   if (result.error) {
-    await prisma.bot.update({ where: { id: bot.id }, data: { status: "error" } });
+    await prisma.bot.update({
+      where: { id: bot.id },
+      data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: result.error } },
+    });
     res.status(502).json({ error: "Failed to restart", detail: result.error });
     return;
   }

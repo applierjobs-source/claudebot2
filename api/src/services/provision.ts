@@ -91,9 +91,10 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
   }
   const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
 
-  const SSH_HANDSHAKE_MS = 50000; // 50s per attempt (Railway → Droplet can be slow)
-  const SSH_TOTAL_MS = 55000; // 55s overall per attempt
-  const RETRY_DELAY_MS = 4000;
+  // One attempt must fit inside create timeout (50s) so we can succeed when network is good
+  const SSH_HANDSHAKE_MS = 38000; // 38s per attempt
+  const SSH_TOTAL_MS = 43000; // 43s overall per attempt
+  const RETRY_DELAY_MS = 3000;
   const connectWithIp = (ip: string) => ({
     host: ip,
     connect: () => {
