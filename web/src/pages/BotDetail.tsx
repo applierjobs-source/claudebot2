@@ -9,6 +9,7 @@ type Bot = {
   template: { name: string; description: string | null };
   lastHeartbeatAt: string | null;
   createdAt: string;
+  configSnapshot?: { provisionError?: string };
 };
 
 type LogEntry = {
@@ -112,13 +113,26 @@ export default function BotDetail() {
               <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "rgba(234, 179, 8, 0.1)", border: "1px solid rgba(234, 179, 8, 0.4)", borderRadius: "8px", fontSize: "0.9rem" }}>
                 <strong>Why pending?</strong> The container is starting (SSH to the Droplet + docker run). This usually takes 10–60 seconds.
                 {bot?.createdAt && (Date.now() - new Date(bot.createdAt).getTime() > 2 * 60 * 1000) && (
-                  <p style={{ margin: "0.5rem 0 0", color: "var(--error)" }}>
-                    Pending for over 2 minutes — the container likely failed to start (e.g. SSH timeout or Droplet unreachable). Click <strong>Start</strong> to retry.
-                  </p>
+                  <>
+                    <p style={{ margin: "0.5rem 0 0", color: "var(--error)" }}>
+                      Pending for over 2 minutes — the container likely failed to start. Click <strong>Start</strong> to retry.
+                    </p>
+                    {bot?.configSnapshot?.provisionError && (
+                      <p style={{ margin: "0.5rem 0 0", fontFamily: "monospace", fontSize: "0.85rem", color: "var(--muted)", wordBreak: "break-word" }}>
+                        Last error: {bot.configSnapshot.provisionError}
+                      </p>
+                    )}
+                  </>
                 )}
                 {(!bot?.createdAt || Date.now() - new Date(bot.createdAt).getTime() <= 2 * 60 * 1000) && (
                   <p style={{ margin: "0.5rem 0 0", color: "var(--muted)" }}>If it stays pending, click <strong>Start</strong> to try again.</p>
                 )}
+              </div>
+            )}
+            {bot?.status === "error" && bot?.configSnapshot?.provisionError && (
+              <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: "8px", fontSize: "0.9rem" }}>
+                <strong>Why error?</strong> <span style={{ fontFamily: "monospace", fontSize: "0.85rem", wordBreak: "break-word" }}>{bot.configSnapshot.provisionError}</span>
+                <p style={{ margin: "0.5rem 0 0", color: "var(--muted)" }}>Click <strong>Start</strong> to retry.</p>
               </div>
             )}
           </div>
