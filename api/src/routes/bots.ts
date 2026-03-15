@@ -141,36 +141,44 @@ botsRouter.post("/", async (req, res) => {
   });
 
   const configJson = JSON.stringify(configSnapshot);
-  const result = await startBotContainer(bot.id, logToken, configJson);
-  if (result.error) {
-    await prisma.bot.update({
-      where: { id: bot.id },
-      data: { status: "error", configSnapshot: { ...(configSnapshot as object), provisionError: result.error } },
+  const snapshotForError = configSnapshot as object;
+
+  // Start container in background so the request doesn't hang on SSH
+  startBotContainer(bot.id, logToken, configJson)
+    .then(async (result) => {
+      if (result.error) {
+        await prisma.bot.update({
+          where: { id: bot.id },
+          data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: result.error } },
+        });
+        return;
+      }
+      await prisma.bot.update({
+        where: { id: bot.id },
+        data: {
+          status: "running",
+          dropletId: result.dropletId,
+          containerId: result.containerId,
+          lastHeartbeatAt: new Date(),
+        },
+      });
+      await prisma.botRun.create({
+        data: { botId: bot.id, status: "running" },
+      });
+    })
+    .catch(async (e) => {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      await prisma.bot.update({
+        where: { id: bot.id },
+        data: { status: "error", configSnapshot: { ...snapshotForError, provisionError: errMsg } },
+      });
     });
-    res.status(502).json({
-      bot,
-      error: "Failed to start container",
-      detail: result.error,
-    });
-    return;
-  }
-  await prisma.bot.update({
-    where: { id: bot.id },
-    data: {
-      status: "running",
-      dropletId: result.dropletId,
-      containerId: result.containerId,
-      lastHeartbeatAt: new Date(),
-    },
-  });
-  await prisma.botRun.create({
-    data: { botId: bot.id, status: "running" },
-  });
-  const updated = await prisma.bot.findUnique({
+
+  const created = await prisma.bot.findUnique({
     where: { id: bot.id },
     include: { template: { select: { name: true, description: true } } },
   });
-  res.status(201).json({ bot: updated });
+  res.status(201).json({ bot: created });
 });
 
 botsRouter.post("/:id/stop", async (req, res) => {

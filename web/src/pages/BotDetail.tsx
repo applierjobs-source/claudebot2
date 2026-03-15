@@ -114,8 +114,10 @@ export default function BotDetail() {
             {bot?.status === "running" && (
               <button onClick={() => doAction("stop")} disabled={!!actioning}>Stop</button>
             )}
-            {bot?.status === "stopped" && (
-              <button className="primary" onClick={() => doAction("restart")} disabled={!!actioning}>Restart</button>
+            {(bot?.status === "stopped" || bot?.status === "pending" || bot?.status === "error") && (
+              <button className="primary" onClick={() => doAction("restart")} disabled={!!actioning}>
+                {bot?.status === "pending" || bot?.status === "error" ? "Start" : "Restart"}
+              </button>
             )}
             <button className="danger" onClick={() => doAction("delete")} disabled={!!actioning}>{actioning === "delete" ? "..." : "Delete"}</button>
           </div>
