@@ -91,8 +91,9 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
   }
   const privateKey = normalizePrivateKey(DO_SSH_PRIVATE_KEY_RAW);
 
-  const SSH_HANDSHAKE_MS = 35000; // 35s per attempt
-  const SSH_TOTAL_MS = 40000; // 40s overall per attempt
+  const SSH_HANDSHAKE_MS = 50000; // 50s per attempt (Railway → Droplet can be slow)
+  const SSH_TOTAL_MS = 55000; // 55s overall per attempt
+  const RETRY_DELAY_MS = 4000;
   const connectWithIp = (ip: string) => ({
     host: ip,
     connect: () => {
@@ -117,13 +118,23 @@ function getSshConnection(): Promise<{ host: string; connect: () => Promise<Clie
         );
         return Promise.race([connectPromise, timeoutPromise]);
       };
-      return attempt().catch((firstErr) => {
-        const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-        if (!msg.includes("handshake") && !msg.includes("timed out") && !msg.includes("Timed out")) return Promise.reject(firstErr);
-        return new Promise<Client>((res, rej) => {
-          setTimeout(() => attempt().then(res, rej), 3000);
+      const isRetryable = (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        return /handshake|timed out|Timed out|ECONNREFUSED|ETIMEDOUT|ENOTFOUND/.test(msg);
+      };
+      return attempt()
+        .catch((err1) => {
+          if (!isRetryable(err1)) return Promise.reject(err1);
+          return new Promise<Client>((res, rej) => {
+            setTimeout(() => attempt().then(res, rej), RETRY_DELAY_MS);
+          });
+        })
+        .catch((err2) => {
+          if (!isRetryable(err2)) return Promise.reject(err2);
+          return new Promise<Client>((res, rej) => {
+            setTimeout(() => attempt().then(res, rej), RETRY_DELAY_MS);
+          });
         });
-      });
     },
   });
 
