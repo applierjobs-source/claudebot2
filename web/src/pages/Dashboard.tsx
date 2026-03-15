@@ -52,6 +52,11 @@ export default function Dashboard() {
                   <div>
                     <strong>{bot.name || bot.template.name}</strong>
                     <span className={`badge ${bot.status}`} style={{ marginLeft: "0.5rem" }}>{bot.status}</span>
+                    {bot.status === "pending" && (
+                      <span style={{ marginLeft: "0.5rem", color: "var(--muted)", fontSize: "0.85rem" }}>
+                        — Starting container. If stuck &gt;2 min, open bot and click Start.
+                      </span>
+                    )}
                     <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{bot.template.description || bot.template.name}</p>
                   </div>
                   <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>View →</span>

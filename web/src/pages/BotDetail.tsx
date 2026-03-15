@@ -108,6 +108,19 @@ export default function BotDetail() {
             <h1 style={{ margin: 0 }}>{bot?.name || bot?.template?.name || "Bot"}</h1>
             <span className={`badge ${bot?.status || "stopped"}`} style={{ marginTop: "0.25rem", display: "inline-block" }}>{bot?.status}</span>
             {bot?.lastHeartbeatAt && <span style={{ color: "var(--muted)", fontSize: "0.85rem", marginLeft: "0.5rem" }}>Last heartbeat: {new Date(bot.lastHeartbeatAt).toLocaleString()}</span>}
+            {bot?.status === "pending" && (
+              <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "rgba(234, 179, 8, 0.1)", border: "1px solid rgba(234, 179, 8, 0.4)", borderRadius: "8px", fontSize: "0.9rem" }}>
+                <strong>Why pending?</strong> The container is starting (SSH to the Droplet + docker run). This usually takes 10–60 seconds.
+                {bot?.createdAt && (Date.now() - new Date(bot.createdAt).getTime() > 2 * 60 * 1000) && (
+                  <p style={{ margin: "0.5rem 0 0", color: "var(--error)" }}>
+                    Pending for over 2 minutes — the container likely failed to start (e.g. SSH timeout or Droplet unreachable). Click <strong>Start</strong> to retry.
+                  </p>
+                )}
+                {(!bot?.createdAt || Date.now() - new Date(bot.createdAt).getTime() <= 2 * 60 * 1000) && (
+                  <p style={{ margin: "0.5rem 0 0", color: "var(--muted)" }}>If it stays pending, click <strong>Start</strong> to try again.</p>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <Link to={`/bot/${id}/activity`}><button>Activity</button></Link>
